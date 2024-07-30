@@ -9,12 +9,14 @@ public class PriorityQueueManager {
 
     private static volatile PriorityQueueManager instance;
 
-
     private final PriorityBlockingQueue<Person> priorityQueue;
 
     private PriorityQueueManager() {
-        Comparator<Person> comparator = Comparator.comparingInt(Person::getAge);
-        this.priorityQueue = new PriorityBlockingQueue<>(10, comparator);
+        //Comparator<Person> comparator = Comparator.comparingInt(Person::getAge);
+        Comparator<Person> comparator = Comparator.comparing( Person::getAge )
+                .thenComparing( Person::hasHelmet )
+                .thenComparing( Person::hasKart );
+        this.priorityQueue = new PriorityBlockingQueue<>(10, comparator );
     }
 
     public static PriorityQueueManager getInstance() {

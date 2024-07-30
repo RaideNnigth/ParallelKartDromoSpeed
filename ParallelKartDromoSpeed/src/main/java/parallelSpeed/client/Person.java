@@ -63,6 +63,14 @@ public class Person {
         return age;
     }
 
+    public boolean hasHelmet() {
+        return helmet != null;
+    }
+
+    public boolean hasKart() {
+        return kart != null;
+    }
+
     public int getArrivalTime() {
         return arrivalTime;
     }
