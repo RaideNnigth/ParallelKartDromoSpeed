@@ -36,4 +36,7 @@ public class PriorityQueueManager {
         priorityQueue.add(person);
     }
 
+    public int getQueueSize() {
+        return priorityQueue.size();
+    }
 }

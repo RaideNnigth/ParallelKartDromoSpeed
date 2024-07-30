@@ -24,6 +24,9 @@ public class Stock {
     private final Semaphore kartSemaphore;
     private final Semaphore trackSemaphore;
 
+    public int helmetUsage = 0;
+    public int kartUsage = 0;
+
     private Stock(int helmetQuantity, int kartQuantity, int trackQuantity) {
         this.helmetQuantity = helmetQuantity;
         this.kartQuantity = kartQuantity;
@@ -50,6 +53,7 @@ public class Stock {
 
     public Helmet fetchHelmet() throws InterruptedException {
         helmetSemaphore.acquire();
+        helmetUsage++;
         return getAvailableHelmet();
     }
 
@@ -82,6 +86,7 @@ public class Stock {
 
     public Kart fetchKart() throws InterruptedException {
         kartSemaphore.acquire();
+        kartUsage++;
         return getAvailableKart();
     }
 
@@ -138,5 +143,9 @@ public class Stock {
         for (int i = 0; i < trackQuantity; i++) {
             tracks.add(new Track());
         }
+    }
+
+    public String getUsage() {
+        return "Helmet usage: " + helmetUsage + " Kart usage: " + kartUsage;
     }
 }
