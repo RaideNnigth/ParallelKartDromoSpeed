@@ -17,7 +17,7 @@ public class Stock {
     private int helmetUsage = 0;
     private int kartUsage = 0;
 
-    private final int timeOut = 2000;
+    private final int timeOut = 100;
 
     private Stock(int helmetQuantity, int kartQuantity) {
         this.helmetQuantity = helmetQuantity;
@@ -29,7 +29,7 @@ public class Stock {
         initResources();
     }
 
-    public static Stock getInstance(int helmetQuantity, int kartQuantity, int trackQuantity) {
+    public static Stock getInstance(int helmetQuantity, int kartQuantity) {
         if (instance == null) {
             synchronized (Stock.class) {
                 if (instance == null) {

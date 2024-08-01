@@ -5,6 +5,8 @@ import parallelSpeed.client.Person;
 import java.util.Comparator;
 import java.util.concurrent.PriorityBlockingQueue;
 
+import static java.lang.Math.round;
+
 public class PriorityQueueManager {
 
     private static volatile PriorityQueueManager instance;
@@ -33,29 +35,33 @@ public class PriorityQueueManager {
         return instance;
     }
 
-    public boolean runNextInQueue(Stock stock) throws InterruptedException {
+    public Person runNextInQueue(Stock stock) throws InterruptedException {
         if (priorityQueue.isEmpty()) {
             System.out.println("No one in the queue.");
-            return false;
+            return null;
         }
         Person person = priorityQueue.poll();
 
         if (!stock.acquireResources(person)) {
             person.incrementPriority();
             priorityQueue.offer(person);
-            return false;
+            return null;
         }
         person.run();
         stock.releaseResources(person);
-        return true;
+        return person;
     }
 
     public void offerPerson(Person person) {
 
         priorityQueue.forEach(
             p -> {
-                if (System.currentTimeMillis() - p.getArrivalTime() > whenToIncreasePriority) {
-                    person.incrementPriority();
+                long waitTime = System.currentTimeMillis() - p.getArrivalTime();
+                if (waitTime > whenToIncreasePriority) {
+                    // For each 1000 milliseconds of wait time, increment the priority by one
+                    int howMuchToIncrement = round((float) (waitTime - whenToIncreasePriority) / 1000);
+                    person.incrementPriority(howMuchToIncrement);
+                    System.out.println("Increasing priority by: " + howMuchToIncrement + " for person: " + p.getName());
                 }
             }
         );
@@ -63,7 +69,7 @@ public class PriorityQueueManager {
         priorityQueue.offer(person);
     }
 
-    public int size() {
-        return priorityQueue.size();
+    public PriorityBlockingQueue<Person> getPriorityQueue() {
+        return priorityQueue;
     }
 }
