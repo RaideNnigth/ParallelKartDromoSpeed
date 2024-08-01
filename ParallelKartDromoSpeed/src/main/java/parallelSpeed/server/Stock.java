@@ -62,14 +62,14 @@ public class Stock {
         try {
             kart = person.setKart(kartQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a kart
             if (kart == null) {
-                System.out.println("No kart available");
+                System.out.println("Person " + person.getName() + " could not run cause of: No Kart available\nPriority will be Increased");
                 return false; // No kart available
             }
 
             helmet = person.setHelmet(helmetQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a helmet
             if (helmet == null) {
                 kartQueue.offer(person.offerKart()); // Return the kart if no helmet
-                System.out.println("No helmet available");
+                System.out.println("Person " + person.getName() + " could not run cause of: No Helmet available.\nPriority will be Increased");
                 return false;
             }
 
@@ -77,6 +77,7 @@ public class Stock {
             return true;
         } catch (InterruptedException e) {
             // Handle interruption
+            System.out.println(e.getMessage() + " |---| " + e.getCause());
             return false;
         } finally {
             // Ensure resources are released if not acquired
@@ -132,4 +133,5 @@ public class Stock {
     public String getUsage() {
         return "Helmet usage: " + helmetUsage + " Kart usage: " + kartUsage;
     }
+
 }

@@ -43,7 +43,6 @@ public class PriorityQueueManager {
         if (!stock.acquireResources(person)) {
             person.incrementPriority();
             priorityQueue.offer(person);
-            System.out.println("Person " + person.getName() + " could not run. Priority increased to " + person.getPriority());
             return false;
         }
         person.run();

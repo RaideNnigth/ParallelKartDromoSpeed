@@ -4,8 +4,10 @@ import parallelSpeed.client.Person;
 import parallelSpeed.server.PriorityQueueManager;
 import parallelSpeed.server.Stock;
 
-import java.util.ArrayList;
 import java.util.Random;
+
+//TODO: Implement group or people getting at the same time
+//TODO: Report detailed
 
 public class Main {
 
@@ -15,7 +17,7 @@ public class Main {
         PriorityQueueManager priorityQueueManager = PriorityQueueManager.getInstance();
         Stock stock = Stock.getInstance(10, 10, 10);
 
-        int minimalAge = 15;
+        int minimalAge = 8;
         int maxAge = 20;
 
         int minutesOffDay = 8 * 60; // 8 hours or 480 minutes
@@ -24,9 +26,7 @@ public class Main {
 
         while (minutesOffDay-- > 0) {
             if (new Random().nextInt(100) < changeOfGettingIn) {
-                Person person = new Person("Person" + minutesOffDay, new Random().nextInt(minimalAge, maxAge + 1) );
-                priorityQueueManager.offerPerson(person);
-                createNewThread(priorityQueueManager, stock);
+                createRandomNumberOfThreads(priorityQueueManager, stock, minutesOffDay, minimalAge, maxAge);
             }
             try {
                 Thread.sleep(eachMinuteIs);
@@ -36,14 +36,30 @@ public class Main {
         }
     }
 
+    private static void createRandomNumberOfThreads(
+            PriorityQueueManager priorityQueueManager,
+            Stock stock,
+            int minutesOffDay,
+            int minimalAge,
+            int maxAge
+    ) {
+        Random random = new Random();
+        int numOfThreads = random.nextInt(5, 10);
+        System.out.println("Group of " + numOfThreads + " has arrived!");
+
+        for (int i = 0; i < numOfThreads; i++) {
+            Person person = new Person("Person " + minutesOffDay + "-" + i, new Random().nextInt(minimalAge, maxAge + 1));
+            priorityQueueManager.offerPerson(person);
+            createNewThread(priorityQueueManager, stock);
+        }
+    }
+
     private static void createNewThread(PriorityQueueManager priorityQueueManager, Stock stock) {
         // Create a new thread
         Thread thread = new Thread(() -> {
             try {
                 boolean couldRun = priorityQueueManager.runNextInQueue(stock);
-                if (!couldRun) {
-                    System.out.println("Person could not run.");
-                } else {
+                if (couldRun) {
                     HOW_MANY_PEOPLE_RAN++;
                 }
 

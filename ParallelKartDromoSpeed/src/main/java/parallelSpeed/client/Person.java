@@ -10,24 +10,28 @@ import java.util.Random;
 public class Person {
     private final String name;
     private final int age;
-    private final int arrivalTime;
-    private int finishedToRunAt;
-    private final int timeToRun;
 
+    // Variables to control the Queue and resources
     private int priority;
-
     private Kart kart;
     private Helmet helmet;
 
-    private int minimalLapTime = 5000; // 5000 ms or 5 realTimeMinutes
-    private int maxLapTime = 7000; // 7000 ms or 7 realTimeMinutes
+    // final variables to manipulate how the Person will behave
+    private final int minimalLapTime = 5000; // 5000 ms or 5 realTimeMinutes
+    private final int maxLapTime = 7000; // 7000 ms or 7 realTimeMinutes
+
+    // Variables to register the info about time and resources for further report
+    private final int arrivalTime;
+    private final int lapWillBeThisLong;
+    private int finishedToRunAt;
+
 
     public Person(String name, int age) {
         this.name = name;
         this.age = age;
         this.priority = 1;
         this.arrivalTime = (int) System.currentTimeMillis();
-        this.timeToRun = new Random().nextInt(minimalLapTime, maxLapTime);
+        this.lapWillBeThisLong = new Random().nextInt(minimalLapTime, maxLapTime);
     }
 
     public void run() throws InterruptedException {
@@ -35,7 +39,7 @@ public class Person {
         // The person is now ready to run use the helmet and kart for a while
         // and then return them to the stock (sleep)
 
-        Thread.sleep(timeToRun);
+        Thread.sleep(lapWillBeThisLong);
         finishedToRunAt = (int) System.currentTimeMillis();
         System.out.println("Person " + name + " has finished running. Runned for " + (finishedToRunAt - arrivalTime) + "ms.");
 
@@ -60,11 +64,19 @@ public class Person {
         return arrivalTime;
     }
 
+    public int getFinishedToRunAt() {
+        return finishedToRunAt;
+    }
+
+    public int getLapWillBeThisLong() {
+        return lapWillBeThisLong;
+    }
+
     public void incrementPriority() {
         priority++;
     }
 
-    public Helmet setHelmet(Helmet helmet){
+    public Helmet setHelmet(Helmet helmet) {
         this.helmet = helmet;
         return this.helmet;
     }
