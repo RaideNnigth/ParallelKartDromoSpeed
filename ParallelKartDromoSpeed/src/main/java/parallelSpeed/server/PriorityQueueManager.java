@@ -11,12 +11,15 @@ public class PriorityQueueManager {
 
     private final PriorityBlockingQueue<Person> priorityQueue;
 
+    private final int whenToIncreasePriority = 14000; // 14 seconds in real time or 14000ms
+
     private PriorityQueueManager() {
         //Comparator<Person> comparator = Comparator.comparingInt(Person::getAge);
-        Comparator<Person> comparator = Comparator.comparing( Person::getAge )
-                .thenComparing( Person::hasHelmet )
-                .thenComparing( Person::hasKart );
-        this.priorityQueue = new PriorityBlockingQueue<>(10, comparator );
+        Comparator<Person> comparator = Comparator.comparing(Person::getPriority)
+                .thenComparing(Person::getAge)
+                .thenComparing(Person::hasHelmet)
+                .thenComparing(Person::hasKart);
+        this.priorityQueue = new PriorityBlockingQueue<>(10, comparator);
     }
 
     public static PriorityQueueManager getInstance() {
@@ -30,15 +33,37 @@ public class PriorityQueueManager {
         return instance;
     }
 
-    public Person getNextPerson() {
-        return priorityQueue.poll();
+    public boolean runNextInQueue(Stock stock) throws InterruptedException {
+        if (priorityQueue.isEmpty()) {
+            System.out.println("No one in the queue.");
+            return false;
+        }
+        Person person = priorityQueue.poll();
+
+        if (!stock.acquireResources(person)) {
+            person.incrementPriority();
+            priorityQueue.offer(person);
+            return false;
+        }
+        person.run();
+        stock.releaseResources(person);
+        return true;
     }
 
-    public void addPerson(Person person) {
-        priorityQueue.add(person);
+    public void offerPerson(Person person) {
+
+        priorityQueue.forEach(
+            p -> {
+                if (System.currentTimeMillis() - p.getArrivalTime() > whenToIncreasePriority) {
+                    person.incrementPriority();
+                }
+            }
+        );
+
+        priorityQueue.offer(person);
     }
 
-    public int getQueueSize() {
+    public int size() {
         return priorityQueue.size();
     }
 }
