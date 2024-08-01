@@ -1,12 +1,8 @@
 package parallelSpeed.server;
 
-import java.util.ArrayList;
+import parallelSpeed.client.Person;
+
 import java.util.concurrent.*;
-
-
-//TODO: check if it is needed to manage the how many karts the track can have at the same time
-//TODO: Use semaphore to control helmet and kart quantity
-
 
 public class Stock {
 
@@ -14,134 +10,122 @@ public class Stock {
 
     private final int helmetQuantity;
     private final int kartQuantity;
-    private final int trackQuantity;
 
-    private final ArrayList<Helmet> helmets = new ArrayList<>();
-    private final ArrayList<Kart> karts = new ArrayList<>();
-    private final ArrayList<Track> tracks = new ArrayList<>();
+    private final LinkedBlockingQueue<Helmet> helmetQueue;
+    private final LinkedBlockingQueue<Kart> kartQueue;
 
-    private final Semaphore helmetSemaphore;
-    private final Semaphore kartSemaphore;
-    private final Semaphore trackSemaphore;
+    private int helmetUsage = 0;
+    private int kartUsage = 0;
 
-    public int helmetUsage = 0;
-    public int kartUsage = 0;
+    private final int timeOut = 2000;
 
-    private Stock(int helmetQuantity, int kartQuantity, int trackQuantity) {
+    private Stock(int helmetQuantity, int kartQuantity) {
         this.helmetQuantity = helmetQuantity;
         this.kartQuantity = kartQuantity;
-        this.trackQuantity = trackQuantity;
+
+        this.helmetQueue = new LinkedBlockingQueue<>(helmetQuantity);
+        this.kartQueue = new LinkedBlockingQueue<>(kartQuantity);
 
         initResources();
-
-        this.helmetSemaphore = new Semaphore(helmetQuantity);
-        this.kartSemaphore = new Semaphore(kartQuantity);
-        this.trackSemaphore = new Semaphore(trackQuantity);
     }
 
     public static Stock getInstance(int helmetQuantity, int kartQuantity, int trackQuantity) {
         if (instance == null) {
             synchronized (Stock.class) {
                 if (instance == null) {
-                    instance = new Stock(helmetQuantity, kartQuantity, trackQuantity);
+                    instance = new Stock(helmetQuantity, kartQuantity);
                 }
             }
         }
         return instance;
     }
 
-
-    public Helmet fetchHelmet() throws InterruptedException {
-        helmetSemaphore.acquire();
-        helmetUsage++;
-        return getAvailableHelmet();
+    public boolean acquireResources(Person person) {
+        if (person.getAge() < 14) {
+            return acquireResourcesForKid(person);
+        } else {
+            return acquireResourcesForAdult(person);
+        }
     }
 
-    private synchronized Helmet getAvailableHelmet() {
-        for (int i = 0; i < helmets.size(); i++) {
-            if (helmets.get(i) != null) {
-                Helmet helmet = helmets.get(i);
-                helmets.set(i, null); // Mark as taken
-                return helmet;
+    public void releaseResources(Person person) {
+        if (person.getAge() < 14) {
+            releaseResourcesForKid(person);
+        } else {
+            releaseResourcesForAdult(person);
+        }
+    }
+
+    private boolean acquireResourcesForAdult(Person person) {
+        Kart kart = null;
+        Helmet helmet = null;
+        try {
+            kart = person.setKart(kartQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a kart
+            if (kart == null) {
+                System.out.println("No kart available");
+                return false; // No kart available
             }
-        }
-        return null;
-    }
 
-    public void releaseHelmet(Helmet helmet) {
-        if (releaseHelmetResource(helmet)) {
-            helmetSemaphore.release(); // Release the permit
-        }
-    }
-
-    private synchronized boolean releaseHelmetResource(Helmet helmet) {
-        for (int i = 0; i < helmets.size(); i++) {
-            if (helmets.get(i) == null) {
-                helmets.set(i, helmet); // Return the helmet
-                return true;
+            helmet = person.setHelmet(helmetQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a helmet
+            if (helmet == null) {
+                kartQueue.offer(person.offerKart()); // Return the kart if no helmet
+                System.out.println("No helmet available");
+                return false;
             }
+
+            // Successfully acquired both
+            return true;
+        } catch (InterruptedException e) {
+            // Handle interruption
+            return false;
+        } finally {
+            // Ensure resources are released if not acquired
+            if (helmet == null && kart != null) kartQueue.offer(person.offerKart());
         }
-        return false;
     }
 
-    public Kart fetchKart() throws InterruptedException {
-        kartSemaphore.acquire();
-        kartUsage++;
-        return getAvailableKart();
-    }
+    private boolean acquireResourcesForKid(Person person) {
+        Helmet helmet = null;
+        Kart kart = null;
+        try {
+            helmet = person.setHelmet(helmetQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a helmet
+            if (helmet == null) return false; // No helmet available
 
-    private synchronized Kart getAvailableKart() {
-        for (int i = 0; i < karts.size(); i++) {
-            if (karts.get(i) != null) {
-                Kart kart = karts.get(i);
-                karts.set(i, null); // Mark as taken
-                return kart;
+            kart = person.setKart(kartQueue.poll(timeOut, TimeUnit.MILLISECONDS)); // Try to get a kart
+            if (kart == null) {
+                helmetQueue.offer(person.offerHelmet()); // Return the helmet if no kart
+                return false;
             }
+
+            // Successfully acquired both
+            return true;
+        } catch (InterruptedException e) {
+            // Handle interruption
+            return false;
+        } finally {
+            // Ensure resources are released if not acquired
+            if (kart == null && helmet != null) helmetQueue.offer(person.offerHelmet());
         }
-        return null;
     }
 
-    public void releaseKart(Kart kart) {
-        if (releaseKartResource(kart)) {
-            kartSemaphore.release(); // Release the permit
-        }
+    private void releaseResourcesForAdult(Person person) {
+        kartQueue.offer(person.offerKart());
+        helmetQueue.offer(person.offerHelmet());
     }
 
-    private synchronized boolean releaseKartResource(Kart kart) {
-        for (int i = 0; i < karts.size(); i++) {
-            if (karts.get(i) == null) {
-                karts.set(i, kart); // Return the kart
-                return true;
-            }
-        }
-        return false;
+    private void releaseResourcesForKid(Person person) {
+        helmetQueue.offer(person.offerHelmet());
+        kartQueue.offer(person.offerKart());
     }
 
     // Utils, helpers, getters and setters
-
-    public int getHelmetQuantity() {
-        return helmetQuantity;
-    }
-
-    public int getKartQuantity() {
-        return kartQuantity;
-    }
-
-    public int getTrackQuantity() {
-        return trackQuantity;
-    }
-
     private void initResources() {
         for (int i = 0; i < helmetQuantity; i++) {
-            helmets.add(new Helmet());
+            helmetQueue.add(new Helmet());
         }
 
         for (int i = 0; i < kartQuantity; i++) {
-            karts.add(new Kart());
-        }
-
-        for (int i = 0; i < trackQuantity; i++) {
-            tracks.add(new Track());
+            kartQueue.add(new Kart());
         }
     }
 
