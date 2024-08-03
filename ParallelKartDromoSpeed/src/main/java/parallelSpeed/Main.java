@@ -1,133 +1,66 @@
 package parallelSpeed;
 
-import parallelSpeed.client.Person;
-import parallelSpeed.server.HelmetQueueManager;
-import parallelSpeed.server.KartQueueManager;
-import parallelSpeed.server.PriorityQueueManager;
+import parallelSpeed.client.Pilot;
+import parallelSpeed.server.Kartodromo;
 
-import java.util.ArrayList;
 import java.util.Random;
-import java.util.concurrent.LinkedBlockingQueue;
+
+/*
+ * Create MultipleThreads to simulate random number of groups getting into a Kartodromo.
+ * Each group has a random number of pilots.
+ * Each pilot has a random age and a random lap time.
+ * The pilots must acquire a helmet and a kart before running.
+ * The pilots with age <= 14 must acquire the helmet first.
+ * The pilots must release the helmet and the kart after running.
+ * The pilots must run for the lap time.
+ * The pilots must be interrupted if they are waiting for resources for more than 1 second.
+ * The pilots with age <= 14 must have priority to acquire the helmet.
+ *
+ * Will simulate work day with 8 hours of work. Each hour has 60 minutes and each minute will be 1 second in real time.
+ */
+
 
 public class Main {
 
-    private static String NAME_SYNTAX = "P_%d-%d";
-    private static int HOW_MANY_PEOPLE_RAN = 0;
-    private static int HOW_MANY_PEOPLE = 0;
-    private static long LAST_RUN_WAS_AT = 0;
+    private static final Random random = new Random();
+    private static final int MIN_PILOTS = 4;
+    private static final int MAX_PILOTS = 10;
 
-    private static final int KART_QUANTITY = 10;
-    private static final int HELMET_QUANTITY = 10;
+    private static final int MINUTES_OF_DAY = 8 * 60;
 
-    private final static HelmetQueueManager HELMET_QUEUE_MANAGER = new HelmetQueueManager(HELMET_QUANTITY);
-    private final static KartQueueManager KART_QUEUE_MANAGER = new KartQueueManager(KART_QUANTITY);
-    private final static PriorityQueueManager PRIORITY_QUEUE_MANAGER = new PriorityQueueManager(HELMET_QUEUE_MANAGER, KART_QUEUE_MANAGER);
-
-    private static final LinkedBlockingQueue<Person> WHO_RAN = new LinkedBlockingQueue<>();
-    private static final ArrayList<Thread> threads = new ArrayList<>();
+    private static int HOW_MANY_HAVE_COME = 0;
 
     public static void main(String[] args) {
-        int minimalAge = 8;
-        int maxAge = 20;
 
-        int minutesOffDay = 8 * 60; // 8 hours or 480 minutes
-        int changeOfGettingIn = 10; // % chance of getting in per minute
-        int eachMinuteIs = 1000; // 1 second in real time for simulation
-
-        while (minutesOffDay-- > 0) {
-            if (new Random().nextInt(100) < changeOfGettingIn) {
-                createRandomNumberOfThreads(minutesOffDay, minimalAge, maxAge);
-            }
-            try {
-                Thread.sleep(eachMinuteIs);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+        for (int i = 0; i < MINUTES_OF_DAY; i++) {
+            int numPilots = random.nextInt(MIN_PILOTS, MAX_PILOTS);
+            int shouldCreateGroup = random.nextInt(0, 10);
+            if (shouldCreateGroup < 5) {
+                createGroup(numPilots, i);
             }
         }
 
+        // Wait for all threads to finish
         try {
-            for (Thread thread : threads) {
-                thread.join();
-            }
-            LAST_RUN_WAS_AT = System.currentTimeMillis();
-
+            Thread.sleep((MINUTES_OF_DAY * 1000) + 5000);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
 
-        System.out.println("How many people get to line: " + HOW_MANY_PEOPLE);
-        System.out.println("How many people get to Run: " + HOW_MANY_PEOPLE_RAN);
-        System.out.println("In % would be: " + (HOW_MANY_PEOPLE_RAN * 100) / HOW_MANY_PEOPLE + "%");
-
-        float averageWaitTime = 0;
-        float averageWaitTimeForRan = 0;
-        for (Person person : WHO_RAN) {
-            averageWaitTimeForRan += person.getWaitingTime();
-        }
-        averageWaitTime += averageWaitTimeForRan;
-        averageWaitTimeForRan /= HOW_MANY_PEOPLE_RAN;
-        System.out.println("Average Wait Time for people that Ran: " + averageWaitTimeForRan + "ms.");
-
-        float averageWaitTimeForNotRan = 0;
-        float biggestWaitTimeForNotRan = 0;
-        for (Person person : PRIORITY_QUEUE_MANAGER.getPriorityQueue()) {
-            averageWaitTimeForNotRan += LAST_RUN_WAS_AT - person.getArrivalTime();
-            if (biggestWaitTimeForNotRan < LAST_RUN_WAS_AT - person.getArrivalTime()) {
-                biggestWaitTimeForNotRan = LAST_RUN_WAS_AT - person.getArrivalTime();
-            }
-        }
-        averageWaitTime += averageWaitTimeForNotRan;
-        averageWaitTimeForNotRan /= PRIORITY_QUEUE_MANAGER.getPriorityQueue().size();
-        System.out.println("Average Wait Time for people that have not Ran: " + averageWaitTimeForNotRan + "ms.");
-        System.out.println("Biggest Wait Time for people that have not Ran: " + biggestWaitTimeForNotRan + "ms.");
-
-        averageWaitTime /= HOW_MANY_PEOPLE + PRIORITY_QUEUE_MANAGER.getPriorityQueue().size();
-        System.out.println("Average Wait Time for all people: " + averageWaitTime + "ms.");
-
-        System.out.println("Total time: " + (System.currentTimeMillis() - LAST_RUN_WAS_AT) + "ms.");
-        System.out.println("Helmet Usage: " + HELMET_QUEUE_MANAGER.getUsage());
-        System.out.println("Kart Usage: " + KART_QUEUE_MANAGER.getUsage());
+        System.out.println("All pilots have finished running");
+        System.out.println("Karts used: " + Kartodromo.getKartsUsage());
+        System.out.println("Helmets used: " + Kartodromo.getHelmetsUsage());
+        //System.out.println("How many pilots did not Ran: " + Kartodromo.getNotRanPilots());
 
     }
 
-    private static void createRandomNumberOfThreads(
-            int minutesOffDay,
-            int minimalAge,
-            int maxAge
-    ) {
-        Random random = new Random();
-        int numOfThreads = random.nextInt(5, 10);
-        System.out.println("Group of " + numOfThreads + " has arrived!");
-
-        ArrayList<Thread> threads = new ArrayList<>();
-        for (int i = 0; i < numOfThreads; i++) {
-            String name = String.format(NAME_SYNTAX, minutesOffDay, i);
-            int age = new Random().nextInt(minimalAge, maxAge + 1);
-            Person person = new Person(name, age);
-            PRIORITY_QUEUE_MANAGER.offerPerson(person);
-            createNewThread();
+    private static void createGroup(int numPilots, int minuteOfTheDay) {
+        for (int i = 0; i < numPilots; i++) {
+            int age = random.nextInt(10, 20);
+            Pilot pilot = new Pilot("P_" + minuteOfTheDay + "-" + i, age);
+            HOW_MANY_HAVE_COME++;
+            Thread thread = new Thread(pilot::run);
+            thread.start();
         }
-    }
-
-    private static void createNewThread() {
-        // Create a new thread
-        Thread thread = new Thread(() -> {
-            try {
-                Person couldRun = PRIORITY_QUEUE_MANAGER.runNextInQueue();
-                if (couldRun != null) {
-                    HOW_MANY_PEOPLE_RAN++;
-                    WHO_RAN.offer(couldRun);
-                }
-                HOW_MANY_PEOPLE++;
-
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-                System.out.println(Thread.currentThread().getName() + " was interrupted.");
-            }
-        });
-        thread.setPriority(Thread.MAX_PRIORITY);
-        // Start the thread
-        thread.start();
-        threads.add(thread);
     }
 }
