@@ -55,6 +55,7 @@ public class Rider implements Comparable<Rider> {
             }
             endTime = System.currentTimeMillis();
             setState(RiderState.FINISHED);
+            System.out.println("Rider " + id + " has finished running after: " + (endTime - startTime) + "ms");
             Kartodromo.releaseKart();
             Kartodromo.releaseHelmet();
         } finally {
@@ -100,6 +101,7 @@ public class Rider implements Comparable<Rider> {
                 System.out.println("Rider " + id + " has finished running after waiting for: " + (System.currentTimeMillis() - arrivalTime) + "ms");
             } else if (state == RiderState.WAITING_FOR_RESOURCES) {
                 System.out.println("Rider " + id + " is waiting for Resources");
+                tryAcquireResources();
             } else if (state == RiderState.READY_TO_RUN) {
                 System.out.println("Rider " + id + " is ready to run");
                 run();

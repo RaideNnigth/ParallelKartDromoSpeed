@@ -86,10 +86,12 @@ public class Kartodromo {
     public static void tryAcquireResourcesForKid(Rider rider) throws InterruptedException {
         assert rider != null;
 
+        System.out.println("Rider " + rider.getId() + " is trying to acquire resources");
         getInLineForHelmet(rider);
         helmetsLock.lock();
         while (waitingForHelmet.peek() != rider) {
             try {
+                System.out.println("Rider " + rider.getId() + " is waiting for helmet");
                 helmetsCondition.await();
             } catch (InterruptedException e) {
                 System.out.println("Rider " + rider.getId() + " was interrupted while waiting for helmet");
@@ -98,6 +100,8 @@ public class Kartodromo {
         waitingForHelmet.poll();
         helmets.acquire();
         long helmetAcquiredAt = System.currentTimeMillis();
+        System.out.println("Rider " + rider.getId() + " acquired helmet at " + helmetAcquiredAt);
+
         helmetsLock.unlock();
 
         getInLineForKart(rider);
@@ -118,7 +122,6 @@ public class Kartodromo {
         }
         waitingForKart.poll();
         karts.acquire();
-        rider.setState(RiderState.READY_TO_RUN);
         kartsLock.unlock();
     }
 
@@ -129,6 +132,7 @@ public class Kartodromo {
         kartsLock.lock();
         while (waitingForKart.peek() != rider) {
             try {
+                System.out.println("Rider " + rider.getId() + " is waiting for kart");
                 kartsCondition.await();
             } catch (InterruptedException e) {
                 System.out.println("Rider " + rider.getId() + " was interrupted while waiting for kart");
@@ -143,6 +147,7 @@ public class Kartodromo {
         helmetsLock.lock();
         while (waitingForHelmet.peek() != rider) {
             try {
+                System.out.println("Rider " + rider.getId() + " is waiting for helmet");
                 if (System.currentTimeMillis() - kartAcquiredAt > MAX_WAITING_TIME) {
                     releaseKart();
                     rider.setState(RiderState.WAITING_FOR_RESOURCES);
@@ -157,7 +162,6 @@ public class Kartodromo {
         }
         waitingForHelmet.poll();
         helmets.acquire();
-        rider.setState(RiderState.READY_TO_RUN);
         helmetsLock.unlock();
     }
 

@@ -11,9 +11,17 @@ class StateObserver implements Runnable {
 
     @Override
     public void run() {
-        while (true) {
+        while (true){
             try {
                 rider.waitForStateChange();
+                RiderState currentState = rider.getState();
+                if (currentState == RiderState.FINISHED) {
+                    break; // Exit loop if finished
+                } else if (currentState == RiderState.WAITING_FOR_RESOURCES) {
+                    rider.tryAcquireResources();
+                } else if (currentState == RiderState.READY_TO_RUN) {
+                    rider.run();
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
