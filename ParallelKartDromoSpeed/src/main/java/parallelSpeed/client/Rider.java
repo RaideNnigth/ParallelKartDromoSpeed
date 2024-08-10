@@ -2,51 +2,49 @@ package parallelSpeed.client;
 
 import parallelSpeed.server.Kartodromo;
 
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
+import static parallelSpeed.server.Kartodromo.RIDER_THREADS;
 
 public class Rider implements Comparable<Rider>, Runnable {
 
-    private RiderState state;
     private final RiderType type;
-    private final ReentrantLock lock = new ReentrantLock();
-    private final Condition stateChanged = lock.newCondition();
-
-    private final int id;
+    private final String id;
     private final int lapTime;
     private final long arrivalTime;
+    private long waitingTime = -1;
+    private long finishTime;
 
-    private boolean helmet = false;
-    private boolean kart = false;
+    public boolean helmet = false;
+    public boolean kart = false;
 
     @Override
     public int compareTo(Rider other) {
-        // Sort by type
-        // Has Helmet or Kart -> U14_KID -> KID -> ADULT
+        // Sort by Helmet first
         if (this.helmet && !other.helmet) {
             return -1;
         } else if (!this.helmet && other.helmet) {
             return 1;
-        } else if (this.kart && !other.kart) {
+        }
+
+        // Sort by Kart second
+        if (this.kart && !other.kart) {
             return -1;
         } else if (!this.kart && other.kart) {
             return 1;
-        } else if (this.type == RiderType.U14_KID && other.type != RiderType.U14_KID) {
-            return -1;
-        } else if (this.type != RiderType.U14_KID && other.type == RiderType.U14_KID) {
-            return 1;
-        } else if (this.type == RiderType.KID && other.type == RiderType.ADULT) {
-            return -1;
-        } else if (this.type == RiderType.ADULT && other.type == RiderType.KID) {
-            return 1;
-        } else {
-            return 0;
         }
+
+        // Sort by RiderType last
+        if (this.type != other.type) {
+            if (this.type == RiderType.U14_KID) return -1;
+            if (other.type == RiderType.U14_KID) return 1;
+            if (this.type == RiderType.KID) return -1;
+            if (other.type == RiderType.KID) return 1;
+        }
+
+        // If all criteria are equal, return 0
+        return 0;
     }
 
-    public Rider(int id, RiderType type) {
+    public Rider(String id, RiderType type) {
         this.id = id;
         this.type = type;
         this.arrivalTime = System.currentTimeMillis();
@@ -59,40 +57,28 @@ public class Rider implements Comparable<Rider>, Runnable {
             Kartodromo.getInLineForKart(this);
         }
     }
-
-    /*
-    Control the rider's state
-     */
     @Override
     public void run() {
-        while (true) {
-            lock.lock();
-            try {
-                while (state == RiderState.WAITING_FOR_RESOURCES) {
-                    stateChanged.await();
-                }
-                if (state == RiderState.RUNNING) {
-                    System.out.println("Rider " + id + " is running");
-                    Thread.sleep(lapTime);
-                    Kartodromo.releaseKart();
-                    Kartodromo.releaseHelmet();
-                    break;
-                }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            } finally {
-                lock.unlock();
-            }
+        try {
+            waitingTime = System.currentTimeMillis() - arrivalTime;
+            Thread.sleep(lapTime);
+            finishTime = System.currentTimeMillis();
+            System.out.println("Rider " + id + " ran for " + lapTime + "ms. After waiting for: " + waitingTime + "ms.");
+            Kartodromo.releaseKart();
+            Kartodromo.releaseHelmet();
+        } catch (InterruptedException e) {
+            System.out.println("Error while karting");
         }
+        finishTime = System.currentTimeMillis();
+        waitingTime = finishTime - arrivalTime;
     }
 
     public void acquireHelmet() {
         this.helmet = true;
         if (kart) {
-            state = RiderState.RUNNING;
-            lock.lock();
-            stateChanged.signalAll();
-            lock.unlock();
+            Thread running = new Thread(this);
+            RIDER_THREADS.add(running);
+            running.start();
         } else {
             Kartodromo.getInLineForKart(this);
         }
@@ -101,17 +87,27 @@ public class Rider implements Comparable<Rider>, Runnable {
     public void acquireKart() {
         this.kart = true;
         if (helmet) {
-            state = RiderState.RUNNING;
-            lock.lock();
-            stateChanged.signalAll();
-            lock.unlock();
+            Thread running = new Thread(this);
+            RIDER_THREADS.add(running);
+            running.start();
         } else {
             Kartodromo.getInLineForHelmet(this);
         }
     }
 
-    public int getId() {
+    public String getId() {
         return id;
     }
 
+    public long getArrivalTime() {
+        return arrivalTime;
+    }
+
+    public long getWaitingTime() {
+        return waitingTime;
+    }
+
+    public long getFinishTime() {
+        return finishTime;
+    }
 }
