@@ -6,45 +6,22 @@ import parallelSpeed.client.RiderType;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Random;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.*;
 
 public class Kartodromo {
+    // State variables
     private final static int NUM_HELMETS = 10;
     private final static int NUM_KARTS = 10;
     private final static int MIN_PILOTS = 1;
-    private final static int MAX_PILOTS = 5;
+    private final static int MAX_PILOTS = 4;
+    private final static int MIN_AGES = 12;
+    private final static int MAX_AGES = 23;
     private final static int MINUTES_OF_DAY = 8 * 60;
-
-    private final static Random RANDOM = new Random();
-    private static boolean END_OF_DAY = false;
-
-    private static final Semaphore helmets = new Semaphore(NUM_HELMETS);
-    private static final Semaphore karts = new Semaphore(NUM_KARTS);
-    private static final PriorityBlockingQueue<Rider> waitingForHelmet = new PriorityBlockingQueue<>();
-    // Order by having helmet or kart, then by arrival time
-    private static final Comparator<Rider> kartComparator = (r1, r2) -> {
-        if (r1.helmet && !r2.helmet) {
-            return -1;
-        } else if (!r1.helmet && r2.helmet) {
-            return 1;
-        }
-        if (r1.kart && !r2.kart) {
-            return -1;
-        } else if (!r1.kart && r2.kart) {
-            return 1;
-        }
-        return 0;
-    };
-
-    private static final PriorityBlockingQueue<Rider> waitingForKart = new PriorityBlockingQueue<>(11, kartComparator);
-    private static final Rider POISON_PILL = new Rider("-1", null); // Special rider object acting as a poison pill
+    private final static int THRESHOLD = 7000;
 
     // Report variables
     private static final ArrayList<Rider> RIDERS = new ArrayList<>();
-    public static final ArrayList<Thread> RIDER_THREADS = new ArrayList<>();
+    public static final LinkedBlockingQueue<Thread> RIDER_THREADS = new LinkedBlockingQueue<>();
     private static int TOTAL_RIDERS = 0;
     private static int TOTAL_U14_KIDS = 0;
     private static int TOTAL_KIDS = 0;
@@ -52,6 +29,40 @@ public class Kartodromo {
     private static int HELMET_USAGE = 0;
     private static int KART_USAGE = 0;
     private static long AVG_WAITING_TIME = 0;
+
+    // Random number generator
+    private final static Random RANDOM = new Random();
+
+    // Semaphores
+    private static final Semaphore helmets = new Semaphore(NUM_HELMETS);
+    private static final Semaphore karts = new Semaphore(NUM_KARTS);
+
+    // Order by having helmet or kart, then by arrival time
+    private static final Comparator<Rider> kartComparator = (r1, r2) -> {
+        // Sort by time first
+        if (r1.getArrivalTime() + THRESHOLD < r2.getArrivalTime()) {
+            return -1;
+        }
+
+        if (r1.hasHelmet() && !r2.hasHelmet()) {
+            return -1;
+        } else if (!r1.hasHelmet() && r2.hasHelmet()) {
+            return 1;
+        }
+        if (r1.hasKart() && !r2.hasKart()) {
+            return -1;
+        } else if (!r1.hasKart() && r2.hasKart()) {
+            return 1;
+        }
+
+        return 0;
+    };
+    private static final PriorityBlockingQueue<Rider> waitingForKart = new PriorityBlockingQueue<>(11, kartComparator);
+    private static final PriorityBlockingQueue<Rider> waitingForHelmet = new PriorityBlockingQueue<>();
+
+    // Stop managing queues and flux control variables
+    private static volatile boolean STOP_MANAGING_HELMETS = false;
+    private static volatile boolean STOP_MANAGING_KARTS = false;
 
     public void working() throws InterruptedException {
         // New thread for getNextInLineForHelmet
@@ -70,36 +81,37 @@ public class Kartodromo {
             }
         }
         long lastMinute = System.currentTimeMillis();
-        END_OF_DAY = true;
-        // Add poison pills to queues to stop the threads
-        waitingForHelmet.offer(POISON_PILL);
-        waitingForKart.offer(POISON_PILL);
-        System.out.println("--------------------End of day---------------------");
 
-        System.out.println("Waiting for threads to finish...");
-        manageLineHelmet.join();
-        System.out.println("Helmet thread finished");
-        manageLineKart.join();
-        System.out.println("Kart thread finished");
-        for (Thread riderThread : RIDER_THREADS) {
-            riderThread.join();
+        STOP_MANAGING_HELMETS = true;
+        STOP_MANAGING_KARTS = true;
+
+        for (Thread t : RIDER_THREADS) {
+            t.join();
         }
+
+        System.out.println("--------------------End of day---------------------");
+        System.out.println("Waiting for threads to finish...");
         System.out.println("All rider threads finished");
+
+        manageLineHelmet.join();
+        System.out.println("Helmet manage queue thread finished");
+        manageLineKart.join();
+        System.out.println("Kart manage queue thread finished");
 
         report(lastMinute);
     }
 
     private static void createGroup(int numPilots, int minuteOfTheDay) {
         for (int i = 0; i < numPilots; i++) {
-            int age = RANDOM.nextInt(11, 22);
+            int age = RANDOM.nextInt(MIN_AGES, MAX_AGES);
             if (age <= 14) {
-                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.U14_KID));
+                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.U14_KID, minuteOfTheDay));
                 TOTAL_U14_KIDS++;
             } else if (age <= 18) {
-                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.KID));
+                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.KID, minuteOfTheDay));
                 TOTAL_KIDS++;
             } else {
-                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.ADULT));
+                RIDERS.add(new Rider(minuteOfTheDay + "-" + i, RiderType.ADULT, minuteOfTheDay));
                 TOTAL_ADULTS++;
             }
             TOTAL_RIDERS++;
@@ -107,42 +119,35 @@ public class Kartodromo {
     }
 
     public void manageHelmetQueue() {
-        while (true) {
+        while (!STOP_MANAGING_HELMETS) {
             try {
-                if (END_OF_DAY) {
-                    break;
+                Rider rider = waitingForHelmet.poll(3, TimeUnit.SECONDS);
+                if (rider != null) {
+                    helmets.acquire();
+                    HELMET_USAGE++;
+                    rider.acquireHelmet();
                 }
-                Rider rider = waitingForHelmet.take();
-                if (rider == POISON_PILL) {
-                    break;
-                }
-                helmets.acquire();
-                rider.acquireHelmet();
-                HELMET_USAGE++;
             } catch (InterruptedException e) {
-                System.out.println("Error managing helmet queue");
+                System.out.println("Helmet queue interrupted");
             }
         }
     }
 
     public void manageKartQueue() {
-        while (true) {
-            try{
-                if (END_OF_DAY) {
-                    break;
+        while (!STOP_MANAGING_KARTS) {
+            try {
+                Rider rider = waitingForKart.poll(3, TimeUnit.SECONDS);
+                if (rider != null) {
+                    karts.acquire();
+                    KART_USAGE++;
+                    rider.acquireKart();
                 }
-                Rider rider = waitingForKart.take();
-                if (rider == POISON_PILL) {
-                    break;
-                }
-                karts.acquire();
-                rider.acquireKart();
-                KART_USAGE++;
             } catch (InterruptedException e) {
-                System.out.println("Error managing kart queue");
+                System.out.println("Kart queue interrupted");
             }
         }
     }
+
 
     public static void getInLineForHelmet(Rider rider) {
         waitingForHelmet.offer(rider);
@@ -164,11 +169,23 @@ public class Kartodromo {
         for (Rider rider : RIDERS) {
             if (rider.getWaitingTime() != -1) {
                 AVG_WAITING_TIME += rider.getWaitingTime();
-                System.out.println("Rider " + rider.getId() + " waited for " + rider.getWaitingTime() + "ms.");
             } else {
                 AVG_WAITING_TIME += lastMinute - rider.getArrivalTime();
-                System.out.println("Rider " + rider.getId() + " waited for " + (lastMinute - rider.getArrivalTime()) + "ms.");
             }
+        }
+
+        int kartQueueSize = waitingForKart.isEmpty() ? 1 : waitingForKart.size();
+        long avgStillWaitingTimeForKart = 0;
+        for (Rider rider : waitingForKart) {
+            avgStillWaitingTimeForKart += lastMinute - rider.getArrivalTime();
+        }
+        avgStillWaitingTimeForKart /= waitingForKart.size();
+
+        int helmetQueueSize = waitingForHelmet.isEmpty() ? 1 : waitingForHelmet.size();
+        long avgStillWaitingTimeForHelmet = 0;
+        for (Rider rider : waitingForHelmet) {
+            avgStillWaitingTimeForHelmet += lastMinute - rider.getArrivalTime();
+            System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (lastMinute - rider.getArrivalTime()));
         }
 
         System.out.println("Total riders: " + TOTAL_RIDERS);
@@ -178,6 +195,10 @@ public class Kartodromo {
         System.out.println("Total helmet usage: " + HELMET_USAGE);
         System.out.println("Total kart usage: " + KART_USAGE);
         System.out.println("Average waiting time: " + AVG_WAITING_TIME / TOTAL_RIDERS);
+        System.out.println("Still waiting for helmet: " + helmetQueueSize);
+        System.out.println("Still waiting for kart: " + kartQueueSize);
+        System.out.println("Average still waiting time for helmet: " + avgStillWaitingTimeForHelmet);
+        System.out.println("Average still waiting time for kart: " + avgStillWaitingTimeForKart);
     }
 
 }

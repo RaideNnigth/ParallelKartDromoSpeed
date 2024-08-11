@@ -4,25 +4,26 @@ import parallelSpeed.server.Kartodromo;
 
 import static parallelSpeed.server.Kartodromo.RIDER_THREADS;
 
-public class Rider implements Comparable<Rider>, Runnable {
+public class Rider implements Comparable<Rider> {
 
     private final RiderType type;
     private final String id;
     private final int lapTime;
     private final long arrivalTime;
     private long waitingTime = -1;
-    private long finishTime;
+    private long treshold = 7000;
 
-    public boolean helmet = false;
-    public boolean kart = false;
+
+    private boolean helmet = false;
+    private boolean kart = false;
+
 
     @Override
     public int compareTo(Rider other) {
-        // Sort by Helmet first
-        if (this.helmet && !other.helmet) {
+
+        // Sort by time first
+        if (this.arrivalTime + treshold < other.arrivalTime) {
             return -1;
-        } else if (!this.helmet && other.helmet) {
-            return 1;
         }
 
         // Sort by Kart second
@@ -40,11 +41,10 @@ public class Rider implements Comparable<Rider>, Runnable {
             if (other.type == RiderType.KID) return 1;
         }
 
-        // If all criteria are equal, return 0
         return 0;
     }
 
-    public Rider(String id, RiderType type) {
+    public Rider(String id, RiderType type, int arrivedAt) {
         this.id = id;
         this.type = type;
         this.arrivalTime = System.currentTimeMillis();
@@ -57,27 +57,25 @@ public class Rider implements Comparable<Rider>, Runnable {
             Kartodromo.getInLineForKart(this);
         }
     }
-    @Override
-    public void run() {
+
+    public void goKarting() {
+        long finishTime;
         try {
             waitingTime = System.currentTimeMillis() - arrivalTime;
             Thread.sleep(lapTime);
-            finishTime = System.currentTimeMillis();
             System.out.println("Rider " + id + " ran for " + lapTime + "ms. After waiting for: " + waitingTime + "ms.");
             Kartodromo.releaseKart();
             Kartodromo.releaseHelmet();
         } catch (InterruptedException e) {
             System.out.println("Error while karting");
         }
-        finishTime = System.currentTimeMillis();
-        waitingTime = finishTime - arrivalTime;
     }
 
     public void acquireHelmet() {
         this.helmet = true;
         if (kart) {
-            Thread running = new Thread(this);
-            RIDER_THREADS.add(running);
+            Thread running = new Thread(this::goKarting);
+            RIDER_THREADS.offer(running);
             running.start();
         } else {
             Kartodromo.getInLineForKart(this);
@@ -87,8 +85,8 @@ public class Rider implements Comparable<Rider>, Runnable {
     public void acquireKart() {
         this.kart = true;
         if (helmet) {
-            Thread running = new Thread(this);
-            RIDER_THREADS.add(running);
+            Thread running = new Thread(this::goKarting);
+            RIDER_THREADS.offer(running);
             running.start();
         } else {
             Kartodromo.getInLineForHelmet(this);
@@ -107,7 +105,15 @@ public class Rider implements Comparable<Rider>, Runnable {
         return waitingTime;
     }
 
-    public long getFinishTime() {
-        return finishTime;
+    public boolean hasHelmet() {
+        return helmet;
+    }
+
+    public boolean hasKart() {
+        return kart;
+    }
+
+    public String getType() {
+        return type.toString();
     }
 }
