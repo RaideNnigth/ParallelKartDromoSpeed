@@ -5,6 +5,7 @@ import parallelSpeed.client.RiderType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.*;
 
@@ -17,7 +18,6 @@ public class Kartodromo {
     private final static int MIN_AGES = 12;
     private final static int MAX_AGES = 23;
     private final static int MINUTES_OF_DAY = 8 * 60;
-    private final static int THRESHOLD = 7000;
 
     // Report variables
     private static final ArrayList<Rider> RIDERS = new ArrayList<>();
@@ -39,9 +39,9 @@ public class Kartodromo {
 
     // Order by having helmet or kart, then by arrival time
     private static final Comparator<Rider> kartComparator = (r1, r2) -> {
-        // Sort by time first
-        if (r1.getArrivalTime() + THRESHOLD < r2.getArrivalTime()) {
-            return -1;
+
+        if (r1 == r2) {
+            return 0;
         }
 
         if (r1.hasHelmet() && !r2.hasHelmet()) {
@@ -49,13 +49,9 @@ public class Kartodromo {
         } else if (!r1.hasHelmet() && r2.hasHelmet()) {
             return 1;
         }
-        if (r1.hasKart() && !r2.hasKart()) {
-            return -1;
-        } else if (!r1.hasKart() && r2.hasKart()) {
-            return 1;
-        }
 
-        return 0;
+        return r1.getKartPriority() < r2.getKartPriority() ? -1 : 1;
+
     };
     private static final PriorityBlockingQueue<Rider> waitingForKart = new PriorityBlockingQueue<>(11, kartComparator);
     private static final PriorityBlockingQueue<Rider> waitingForHelmet = new PriorityBlockingQueue<>();
@@ -63,6 +59,9 @@ public class Kartodromo {
     // Stop managing queues and flux control variables
     private static volatile boolean STOP_MANAGING_HELMETS = false;
     private static volatile boolean STOP_MANAGING_KARTS = false;
+    private static int CURRENT_MINUTE = 0;
+    private static final int TIMEOUT_WAITING_FOR_PERSON_IN_KART_QUEUE = 3;
+    private static final int TIMEOUT_WAITING_FOR_PERSON_IN_HELMET_QUEUE = 1;
 
     public void working() throws InterruptedException {
         // New thread for getNextInLineForHelmet
@@ -72,6 +71,7 @@ public class Kartodromo {
         manageLineKart.start();
 
         for (int i = 0; i < MINUTES_OF_DAY; i++) {
+            CURRENT_MINUTE = i;
             int shouldCreateGroup = RANDOM.nextInt(0, 10);
             if (shouldCreateGroup <= 2) {
                 int numPilots = RANDOM.nextInt(MIN_PILOTS, MAX_PILOTS);
@@ -80,8 +80,6 @@ public class Kartodromo {
                 Thread.sleep(1000);
             }
         }
-        long lastMinute = System.currentTimeMillis();
-
         STOP_MANAGING_HELMETS = true;
         STOP_MANAGING_KARTS = true;
 
@@ -98,7 +96,7 @@ public class Kartodromo {
         manageLineKart.join();
         System.out.println("Kart manage queue thread finished");
 
-        report(lastMinute);
+        report();
     }
 
     private static void createGroup(int numPilots, int minuteOfTheDay) {
@@ -121,12 +119,13 @@ public class Kartodromo {
     public void manageHelmetQueue() {
         while (!STOP_MANAGING_HELMETS) {
             try {
-                Rider rider = waitingForHelmet.poll(3, TimeUnit.SECONDS);
+                Rider rider = waitingForHelmet.poll(TIMEOUT_WAITING_FOR_PERSON_IN_HELMET_QUEUE, TimeUnit.SECONDS);
                 if (rider != null) {
                     helmets.acquire();
                     HELMET_USAGE++;
-                    rider.acquireHelmet();
+                    rider.acquireHelmet(CURRENT_MINUTE);
                 }
+
             } catch (InterruptedException e) {
                 System.out.println("Helmet queue interrupted");
             }
@@ -136,11 +135,11 @@ public class Kartodromo {
     public void manageKartQueue() {
         while (!STOP_MANAGING_KARTS) {
             try {
-                Rider rider = waitingForKart.poll(3, TimeUnit.SECONDS);
+                Rider rider = waitingForKart.poll(TIMEOUT_WAITING_FOR_PERSON_IN_KART_QUEUE, TimeUnit.SECONDS);
                 if (rider != null) {
                     karts.acquire();
                     KART_USAGE++;
-                    rider.acquireKart();
+                    rider.acquireKart(CURRENT_MINUTE);
                 }
             } catch (InterruptedException e) {
                 System.out.println("Kart queue interrupted");
@@ -165,28 +164,34 @@ public class Kartodromo {
         karts.release();
     }
 
-    public static void report(long lastMinute) {
+    public static void report() {
         for (Rider rider : RIDERS) {
             if (rider.getWaitingTime() != -1) {
                 AVG_WAITING_TIME += rider.getWaitingTime();
             } else {
-                AVG_WAITING_TIME += lastMinute - rider.getArrivalTime();
+                AVG_WAITING_TIME += MINUTES_OF_DAY - rider.getArrivalTime();
             }
         }
 
         int kartQueueSize = waitingForKart.isEmpty() ? 1 : waitingForKart.size();
+        System.out.println("Kart queue size: " + kartQueueSize);
         long avgStillWaitingTimeForKart = 0;
         for (Rider rider : waitingForKart) {
-            avgStillWaitingTimeForKart += lastMinute - rider.getArrivalTime();
+            avgStillWaitingTimeForKart += MINUTES_OF_DAY - rider.getArrivalTime();
+            System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (MINUTES_OF_DAY - rider.getArrivalTime() + " minutes"
+                                + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart() ));
         }
         avgStillWaitingTimeForKart /= waitingForKart.size();
 
         int helmetQueueSize = waitingForHelmet.isEmpty() ? 1 : waitingForHelmet.size();
+        System.out.println("Helmet queue size: " + helmetQueueSize);
         long avgStillWaitingTimeForHelmet = 0;
         for (Rider rider : waitingForHelmet) {
-            avgStillWaitingTimeForHelmet += lastMinute - rider.getArrivalTime();
-            System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (lastMinute - rider.getArrivalTime()));
+            avgStillWaitingTimeForHelmet += MINUTES_OF_DAY - rider.getArrivalTime();
+            System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (MINUTES_OF_DAY - rider.getArrivalTime()) + " minutes"
+                    + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart() );
         }
+        avgStillWaitingTimeForHelmet /= waitingForHelmet.size();
 
         System.out.println("Total riders: " + TOTAL_RIDERS);
         System.out.println("Total U14 kids: " + TOTAL_U14_KIDS);

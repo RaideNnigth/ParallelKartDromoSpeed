@@ -9,10 +9,10 @@ public class Rider implements Comparable<Rider> {
     private final RiderType type;
     private final String id;
     private final int lapTime;
-    private final long arrivalTime;
-    private long waitingTime = -1;
-    private long treshold = 7000;
-
+    private final int arrivalTime;
+    private int waitingTime = -1;
+    private double helmetPriority;
+    private double kartPriority;
 
     private boolean helmet = false;
     private boolean kart = false;
@@ -21,34 +21,24 @@ public class Rider implements Comparable<Rider> {
     @Override
     public int compareTo(Rider other) {
 
-        // Sort by time first
-        if (this.arrivalTime + treshold < other.arrivalTime) {
+        // Sort by priority
+        if (this.helmetPriority < other.helmetPriority) {
             return -1;
-        }
-
-        // Sort by Kart second
-        if (this.kart && !other.kart) {
-            return -1;
-        } else if (!this.kart && other.kart) {
+        } else if (this.helmetPriority > other.helmetPriority) {
             return 1;
         }
-
-        // Sort by RiderType last
-        if (this.type != other.type) {
-            if (this.type == RiderType.U14_KID) return -1;
-            if (other.type == RiderType.U14_KID) return 1;
-            if (this.type == RiderType.KID) return -1;
-            if (other.type == RiderType.KID) return 1;
-        }
-
         return 0;
     }
 
     public Rider(String id, RiderType type, int arrivedAt) {
         this.id = id;
         this.type = type;
-        this.arrivalTime = System.currentTimeMillis();
+        this.arrivalTime = arrivedAt;
         this.lapTime = (int) ((Math.random() * 1000) + 5000);
+
+        // priority is a function of the type of rider and the time they arrived (initially 1)
+        setHelmetPriority();
+        setKartPriority();
 
         // Set the initial state (Which queue the rider should be in)
         if (this.type == RiderType.KID || this.type == RiderType.U14_KID) {
@@ -59,11 +49,9 @@ public class Rider implements Comparable<Rider> {
     }
 
     public void goKarting() {
-        long finishTime;
         try {
-            waitingTime = System.currentTimeMillis() - arrivalTime;
             Thread.sleep(lapTime);
-            System.out.println("Rider " + id + " ran for " + lapTime + "ms. After waiting for: " + waitingTime + "ms.");
+            System.out.println("Rider " + id + " ran for " + lapTime + "ms. After waiting for: " + waitingTime + " minutes (simulation).");
             Kartodromo.releaseKart();
             Kartodromo.releaseHelmet();
         } catch (InterruptedException e) {
@@ -71,9 +59,10 @@ public class Rider implements Comparable<Rider> {
         }
     }
 
-    public void acquireHelmet() {
+    public void acquireHelmet(int at) {
         this.helmet = true;
         if (kart) {
+            waitingTime = at - arrivalTime;
             Thread running = new Thread(this::goKarting);
             RIDER_THREADS.offer(running);
             running.start();
@@ -82,9 +71,10 @@ public class Rider implements Comparable<Rider> {
         }
     }
 
-    public void acquireKart() {
+    public void acquireKart(int at) {
         this.kart = true;
         if (helmet) {
+            waitingTime = at - arrivalTime;
             Thread running = new Thread(this::goKarting);
             RIDER_THREADS.offer(running);
             running.start();
@@ -97,11 +87,11 @@ public class Rider implements Comparable<Rider> {
         return id;
     }
 
-    public long getArrivalTime() {
+    public int getArrivalTime() {
         return arrivalTime;
     }
 
-    public long getWaitingTime() {
+    public int getWaitingTime() {
         return waitingTime;
     }
 
@@ -113,7 +103,24 @@ public class Rider implements Comparable<Rider> {
         return kart;
     }
 
-    public String getType() {
-        return type.toString();
+    public RiderType getType() {
+        return type;
+    }
+
+    public void setHelmetPriority() {
+        // Logarithmic increase in priority
+        int typeIncrease = type == RiderType.ADULT ? 3 : type == RiderType.KID ? 2 : 1;
+        double arrivalIncrease = (double) arrivalTime / 10;
+        this.helmetPriority = 1 + Math.log(arrivalIncrease + typeIncrease);
+    }
+
+    public void setKartPriority() {
+        // Logarithmic increase in priority
+        double arrivalIncrease = (double) arrivalTime / 10;
+        this.kartPriority = 1 + Math.log(arrivalIncrease);
+    }
+
+    public double getKartPriority() {
+        return kartPriority;
     }
 }
