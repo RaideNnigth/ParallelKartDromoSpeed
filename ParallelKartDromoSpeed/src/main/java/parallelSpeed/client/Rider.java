@@ -20,7 +20,6 @@ public class Rider implements Comparable<Rider> {
 
     @Override
     public int compareTo(Rider other) {
-
         // Sort by priority
         if (this.helmetPriority < other.helmetPriority) {
             return -1;

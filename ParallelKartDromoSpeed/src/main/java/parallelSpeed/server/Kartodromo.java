@@ -5,7 +5,6 @@ import parallelSpeed.client.RiderType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.Random;
 import java.util.concurrent.*;
 
@@ -13,8 +12,8 @@ public class Kartodromo {
     // State variables
     private final static int NUM_HELMETS = 10;
     private final static int NUM_KARTS = 10;
-    private final static int MIN_PILOTS = 1;
-    private final static int MAX_PILOTS = 4;
+    private final static int MIN_PILOTS = 4;
+    private final static int MAX_PILOTS = 10;
     private final static int MIN_AGES = 12;
     private final static int MAX_AGES = 23;
     private final static int MINUTES_OF_DAY = 8 * 60;
@@ -39,7 +38,6 @@ public class Kartodromo {
 
     // Order by having helmet or kart, then by arrival time
     private static final Comparator<Rider> kartComparator = (r1, r2) -> {
-
         if (r1 == r2) {
             return 0;
         }
@@ -51,7 +49,6 @@ public class Kartodromo {
         }
 
         return r1.getKartPriority() < r2.getKartPriority() ? -1 : 1;
-
     };
     private static final PriorityBlockingQueue<Rider> waitingForKart = new PriorityBlockingQueue<>(11, kartComparator);
     private static final PriorityBlockingQueue<Rider> waitingForHelmet = new PriorityBlockingQueue<>();
@@ -77,8 +74,8 @@ public class Kartodromo {
                 int numPilots = RANDOM.nextInt(MIN_PILOTS, MAX_PILOTS);
                 System.out.println("Creating group of " + numPilots + " pilots at minute " + i);
                 createGroup(numPilots, i);
-                Thread.sleep(1000);
             }
+            Thread.sleep(1000);
         }
         STOP_MANAGING_HELMETS = true;
         STOP_MANAGING_KARTS = true;
@@ -125,7 +122,6 @@ public class Kartodromo {
                     HELMET_USAGE++;
                     rider.acquireHelmet(CURRENT_MINUTE);
                 }
-
             } catch (InterruptedException e) {
                 System.out.println("Helmet queue interrupted");
             }
@@ -179,9 +175,9 @@ public class Kartodromo {
         for (Rider rider : waitingForKart) {
             avgStillWaitingTimeForKart += MINUTES_OF_DAY - rider.getArrivalTime();
             System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (MINUTES_OF_DAY - rider.getArrivalTime() + " minutes"
-                                + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart() ));
+                    + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart()));
         }
-        avgStillWaitingTimeForKart /= waitingForKart.size();
+        avgStillWaitingTimeForKart /= (waitingForKart.size() + 1);
 
         int helmetQueueSize = waitingForHelmet.isEmpty() ? 1 : waitingForHelmet.size();
         System.out.println("Helmet queue size: " + helmetQueueSize);
@@ -189,9 +185,9 @@ public class Kartodromo {
         for (Rider rider : waitingForHelmet) {
             avgStillWaitingTimeForHelmet += MINUTES_OF_DAY - rider.getArrivalTime();
             System.out.println("Rider " + rider.getId() + " age: " + rider.getType() + " waiting time: " + (MINUTES_OF_DAY - rider.getArrivalTime()) + " minutes"
-                    + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart() );
+                    + " has helmet: " + rider.hasHelmet() + " has kart: " + rider.hasKart());
         }
-        avgStillWaitingTimeForHelmet /= waitingForHelmet.size();
+        avgStillWaitingTimeForHelmet /= (waitingForHelmet.size() + 1);
 
         System.out.println("Total riders: " + TOTAL_RIDERS);
         System.out.println("Total U14 kids: " + TOTAL_U14_KIDS);
@@ -200,8 +196,8 @@ public class Kartodromo {
         System.out.println("Total helmet usage: " + HELMET_USAGE);
         System.out.println("Total kart usage: " + KART_USAGE);
         System.out.println("Average waiting time: " + AVG_WAITING_TIME / TOTAL_RIDERS);
-        System.out.println("Still waiting for helmet: " + helmetQueueSize);
-        System.out.println("Still waiting for kart: " + kartQueueSize);
+        System.out.println("Still waiting for helmet: " + (helmetQueueSize - 1));
+        System.out.println("Still waiting for kart: " + (kartQueueSize - 1));
         System.out.println("Average still waiting time for helmet: " + avgStillWaitingTimeForHelmet);
         System.out.println("Average still waiting time for kart: " + avgStillWaitingTimeForKart);
     }
